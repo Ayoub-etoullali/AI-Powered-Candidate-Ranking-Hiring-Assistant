@@ -18,6 +18,14 @@ def filter_by_job_title(candidates, job_title):
             filtered.append(candidate)
     return filtered
 
+def build_profile_text(candidate):
+    """Concatenate work experiences, skills, and education into one text string."""
+    experiences = " ".join([exp["roleName"] for exp in candidate.get("work_experiences", [])])
+    skills = " ".join(candidate.get("skills", []))
+    education = " ".join([deg.get("subject", "") for deg in candidate.get("education", {}).get("degrees", [])])
+    
+    return f"{experiences} {skills} {education}"
+
 # -------------------------------
 # Load candidate data
 # -------------------------------
@@ -35,49 +43,63 @@ job_title = st.text_input("Enter Job Title", "")
 job_description = st.text_area("Enter Job Description", "")
 
 # Filter candidates by job title if provided
-# if job_title:
-#     filtered_df = df[df['job_title'].str.contains(job_title, case=False, na=False)]
-# else:
-#     filtered_df = df.copy()
-filtered_df = filter_by_job_title(candidates, job_title)
-df = pd.DataFrame(filtered_df)
+# Filter candidates by job title if provided
+filtered_candidates = filter_by_job_title(candidates, job_title)
+df_candidates = pd.DataFrame(filtered_candidates)
 
-st.write(f"Found {len(filtered_df)} candidates matching the job title.")
+st.write(f"Found {len(filtered_candidates)} candidates matching the job title.")
 
 # -------------------------------
 # Compute similarity
 # -------------------------------
-if job_description and len(filtered_df) > 0:
+if job_description and len(filtered_candidates) > 0:
     st.write("Calculating similarity scores...")
     
     model = SentenceTransformer('all-MiniLM-L6-v2')
-    
-    # Embed job description
+
+    # Build profile text
+    def build_profile_text(row):
+        experiences = " ".join([exp["roleName"] for exp in row.get("work_experiences", [])])
+        skills = " ".join(row.get("skills", []))
+        education = " ".join([deg.get("subject", "") for deg in row.get("education", {}).get("degrees", [])])
+        return f"{experiences} {skills} {education}"
+
+    # Apply row-wise
+    df_candidates["profile_text"] = df_candidates.apply(build_profile_text, axis=1)
+
+    # Encode job description
     job_embedding = model.encode(job_description, convert_to_tensor=True)
-    
-    # Embed candidate answers (assuming a 'resume_text' field)
-    candidate_embeddings = model.encode(filtered_df['resume_text'].tolist(), convert_to_tensor=True)
-    
+
+    # Encode candidate profiles
+    candidate_embeddings = model.encode(df_candidates["profile_text"].tolist(), convert_to_tensor=True)
+
     # Compute cosine similarity
     similarity_scores = util.cos_sim(job_embedding, candidate_embeddings)[0].tolist()
-    
-    filtered_df['similarity_score'] = similarity_scores
-    
-    # Sort candidates by similarity
-    filtered_df = filtered_df.sort_values(by='similarity_score', ascending=False)
-    
-    st.write("Top candidates:")
-    st.dataframe(filtered_df[['name', 'job_title', 'similarity_score']].head(10))
-    
+    df_candidates["similarity_score"] = similarity_scores
+
+    # Pick a display job title (first role)
+    df_candidates["display_job_title"] = df_candidates["work_experiences"].apply(
+        lambda exps: exps[0]["roleName"] if exps else "N/A"
+    )
+
+    # Sort by similarity
+    df_candidates = df_candidates.sort_values(by="similarity_score", ascending=False)
+
+    # Show top candidates
+    st.write("### Top candidates:")
+    st.dataframe(df_candidates[["name", "display_job_title", "similarity_score"]].head(10))
+
     # -------------------------------
-    # Pick top 5 candidates for demo
+    # Pick top 5 candidates
     # -------------------------------
-    top5 = filtered_df.head(5)
-    
-    st.write("✅ Recommended 5 candidates to hire:")
+    st.write("### ✅ Recommended 5 candidates to hire:")
+    top5 = df_candidates.head(5)
+
     for idx, row in top5.iterrows():
-        st.write(f"**{row['name']}** ({row['job_title']}) — Similarity Score: {row['similarity_score']:.2f}")
-        st.write(f"Reason for selection: High similarity to job description and relevant experience.")
+        st.write(f"**{row['name']}** ({row['display_job_title']}) — "
+                 f"Similarity Score: {row['similarity_score']:.2f}")
+        st.write("Reason for selection: High similarity to job description and relevant experience.")
         st.markdown("---")
+
 else:
     st.info("Enter a job description to rank candidates.")
