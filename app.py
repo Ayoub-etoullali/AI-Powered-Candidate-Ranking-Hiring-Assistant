@@ -1,16 +1,28 @@
 import streamlit as st
 import pandas as pd
 from sentence_transformers import SentenceTransformer, util
+import json
+
+def filter_by_job_title(candidates, job_title):
+    """
+    Filters candidates by job title, checking across all work_experiences.roleName.
+    """
+    if not job_title:
+        return candidates  # no filtering
+    
+    filtered = []
+    for candidate in candidates:
+        experiences = candidate.get("work_experiences", [])
+        # check if any past role contains the job title
+        if any(job_title.lower() in exp["roleName"].lower() for exp in experiences):
+            filtered.append(candidate)
+    return filtered
 
 # -------------------------------
 # Load candidate data
 # -------------------------------
-@st.cache_data
-def load_data():
-    df = pd.read_json("form-submissions.json")
-    return df
-
-df = load_data()
+with open("data/form-submissions.json") as f:
+    candidates = json.load(f)
 
 # -------------------------------
 # App UI
@@ -23,10 +35,12 @@ job_title = st.text_input("Enter Job Title", "")
 job_description = st.text_area("Enter Job Description", "")
 
 # Filter candidates by job title if provided
-if job_title:
-    filtered_df = df[df['job_title'].str.contains(job_title, case=False, na=False)]
-else:
-    filtered_df = df.copy()
+# if job_title:
+#     filtered_df = df[df['job_title'].str.contains(job_title, case=False, na=False)]
+# else:
+#     filtered_df = df.copy()
+filtered_df = filter_by_job_title(candidates, job_title)
+df = pd.DataFrame(filtered_df)
 
 st.write(f"Found {len(filtered_df)} candidates matching the job title.")
 
