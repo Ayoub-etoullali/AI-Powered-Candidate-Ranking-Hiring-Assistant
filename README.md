@@ -42,8 +42,8 @@ This prototype is designed for **quick demo purposes**, but can be extended to a
 1. Clone this repository:
 
 ```bash
-git clone <repository_url>
-cd <repository_folder>
+git clone https://github.com/Ayoub-etoullali/AI-Powered-Candidate-Ranking-Hiring-Assistant
+cd AI-Powered-Candidate-Ranking-Hiring-Assistant
 ```
 
 2. Install dependencies:
